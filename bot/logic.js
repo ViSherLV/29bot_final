@@ -1,41 +1,71 @@
-const Telegram = require('telegram-bot-api');
-const controllers = require('./controllers');
-const { util: { request } } = require('../helpers');
-const { Responder: { findResponder } } = require('../mongo/methods');
-const { log } = require('../helpers');
+const Telegraf = require('telegraf');
+const controllers = require('../bot/controllers');
 const {
-  messageTypes,
-  telegramMessageTypes,
-  telegramMessageHandlers,
-  callbackQueryType,
-} = require('../helpers/enums');
+  util: { request },
+} = require('../helpers');
+const {
+  Responder: { findResponder },
+} = require('../mongo/methods');
+const { log } = require('../helpers');
+const { messageTypes, telegramMessageTypes, telegramMessageHandlers, callbackQueryType } = require('../helpers/enums');
 
-
-class TelegramBot {
-
+class TelegrafBot {
   static detectMessageType(body) {
-    for (const type in telegramMessageTypes)
-      if (type in body)
-        return telegramMessageTypes[type];
+    for (const type in telegramMessageTypes) if (type in body) return telegramMessageTypes[type];
     return null;
   }
 
   constructor(token) {
     this.token = token;
-    this.api = new Telegram({ token: this.token });
+    this.api = new Telegraf({ token: this.token });
     this.controllers = controllers;
+    this.telegram = this.api.telegram;
   }
 
-  afterMessage(userChatId) {
-    this.api.sendMessage({
-      chat_id: userChatId,
-      text: 'Це базове повідомлення, яке з\'являється, коли всі дії виконані',
-      reply_markup: JSON.stringify({
-        inline_keyboard: [
-          [{ text: 'Встановити мій статус реагувальника', callback_data: callbackQueryType.status.responder.set },]
-        ]
-      })
-    })
+  async sendMessage(userChatId, pack) {
+    if (!pack) {
+      return null;
+    }
+    const { type } = pack;
+    switch (type) {
+      case messageTypes.withKeyboard: {
+        return this.telegram.sendMessage(userChatId, pack.text);
+      }
+      case messageTypes.simpleMessage: {
+        return await this.telegram.sendMessage(userChatId, pack);
+      }
+      case messageTypes.location: {
+        await this.api.sendLocation({ ...pack, chat_id: userChatId });
+        break;
+      }
+      default: {
+        log.error(`[bot][method:sendMessage] Undefined type: ${type}`);
+        break;
+      }
+    }
+  }
+
+  async haveMessage(body) {
+    const telegramType = TelegramBot.detectMessageType(body);
+    if (!telegramType) {
+      log.error(`[error][method:haveMessage] Can not detect message type from telegram ${JSON.stringify(body)}`);
+      return;
+    }
+    const telegramHandler = telegramMessageHandlers[telegramType];
+    switch (telegramType) {
+      case telegramMessageTypes.message: {
+        this.onMessage(telegramHandler, body)
+          .then(({ userChatId, toStart }) => toStart && this.afterMessage(userChatId))
+          .catch(err => log.error(err));
+        break;
+      }
+      case telegramMessageTypes.callback_query: {
+        this.onQuickReplies(telegramHandler, body)
+          .then(({ userChatId, toStart }) => toStart && this.afterMessage(userChatId))
+          .catch(err => log.error(err));
+        break;
+      }
+    }
   }
 
   async onMessage(handler, pack) {
@@ -56,15 +86,29 @@ class TelegramBot {
     if (!result) {
       return await this.canNotController(userChatId);
     }
-    const message = await this.sendMessage(userChatId, result.message);
+    const message = await this.telegram.sendMessage(userChatId, result.message);
     const { afterSend } = result;
     console.log(afterSend);
-    if(afterSend.length) {
+    if (afterSend.length) {
       afterSend.forEach(event => {
-        this[event](userChatId, message.message_id)
-      })
+        this[event](userChatId, message.message_id);
+      });
     }
     return { toStart: result.toStart, userChatId };
+  }
+
+  async afterMessage(userChatId) {
+    await this.telegram.sendMessage(userChatId, "Це базове повідомлення, яке з'являється, коли всі дії виконані");
+    // reply_markup: JSON.stringify({
+    //     inline_keyboard: [
+    //       [{ text: 'Встановити мій статус реагувальника', callback_data: callbackQueryType.status.responder.set }],
+    //     ],
+    //   })
+  }
+
+  async canNotHandle(userChatId) {
+    await this.telegram.sendMessage(userChatId, 'Not found controller');
+    return userChatId;
   }
 
   async onQuickReplies(handler, pack) {
@@ -79,94 +123,17 @@ class TelegramBot {
         break;
       }
     }
-    if (!controller) {
-      return await this.canNotHandle(userChatId);
-    }
-    // if (controller.progress)
-    //   controller.progress((message) => {
-    //     console.log('call before')
-    //     this.sendMessage(userChatId, message)
-    //   });
-    const result = await controller({ userProfile, value })
-      .progress((message) => {
-        log.info('call after');
-        this.sendMessage(userChatId, message);
-      });
+    if (!controller) return await this.canNotHandle(userChatId);
 
-    if (!result) {
-      return await this.canNotController(userChatId);
-    }
-    const message = await this.sendMessage(userChatId, result.message);
+    const result = await controller({ userProfile, value }).progress(async message => {
+      log.info('call after');
+      await this.telegram.sendMessage(userChatId, message);
+    });
 
+    if (!result) return await this.canNotController(userChatId);
+    const message = await this.telegram.sendMessage(userChatId, result.message);
     return { toStart: result.toStart, userChatId };
-  }
-
-  async haveMessage(body) {
-    const telegramType = TelegramBot.detectMessageType(body);
-    if (!telegramType) {
-      log.error(`[error][method:haveMessage] can not detec message type from telegram ${JSON.stringify(body)}`);
-      return;
-    }
-    const telegramHandler = telegramMessageHandlers[telegramType];
-    switch (telegramType) {
-      case telegramMessageTypes.message: {
-        this.onMessage(telegramHandler, body)
-          .then(({ userChatId, toStart }) => toStart && this.afterMessage(userChatId))
-          .catch(err => log.error(err));
-        break;
-      }
-      case telegramMessageTypes.callback_query: {
-        this.onQuickReplies(telegramHandler, body)
-          .then(({ userChatId, toStart }) => toStart && this.afterMessage(userChatId))
-          .catch(err => log.error(err));
-        break;
-      }
-    }
-
-  }
-  sendMessage(userChatId, pack) {
-    if (!pack) {
-      return null;
-    }
-    const { type } = pack;
-    switch (type) {
-      case messageTypes.withKeyboard:
-      case messageTypes.simpleMessage: {
-        return this.api.sendMessage({ ...pack, chat_id: userChatId });
-      }
-      case messageTypes.location: {
-        this.api.sendLocation({ ...pack, chat_id: userChatId });
-        break;
-      }
-      default: {
-        log.error(`[bot][mehod:sendMessage]Undefined type: ${type}`);
-      }
-    }
-
-  }
-  async canNotHandle(userChatId) {
-    await this.api.sendMessage({ chat_id: userChatId, text: 'Not found controller' });
-    return userChatId;
-  }
-  async canNotController(userChatId) {
-    await this.api.sendMessage({ chat_id: userChatId, text: 'Controller not return value' });
-    return userChatId;
-  }
-  async pinMessage(userChatId, messageId) {
-    const uri = `https://api.telegram.org/bot${process.env.telegramBotToken}/pinChatMessage`;
-    const body = {
-      chat_id: userChatId,
-      message_id: messageId,
-    };
-    const result = await request({uri,method: 'POST',body});
-    if (result.statusCode != 200) {
-      const err = new Error(`Can not make request to pin message with id: ${messageId}`);
-      err.name = "TelegramBot: PinMessage ";
-      console.log(err);
-      console.log(result.body);
-      return null;
-    }
   }
 }
 
-module.exports = { TelegramBot };
+module.exports = { TelegrafBot };

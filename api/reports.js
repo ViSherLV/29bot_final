@@ -5,9 +5,18 @@ let id = "";
 const { Responder: { findTelegramUser } } = require('../mongo/methods');
 module.exports = (bot)=>{
     return async (req,res)=>{
-const responderId =req.body.Report.responder_id;
+      const responderId =req.body.Report.responder_id;
         const userProfile = await findTelegramUser(responderId);
-        userProfile.chatId
+        module.exports.responderId = responderId;
+        const secret = req.body.secret;
+        module.exports.secret = secret;
+        const callCardId = req.body.Report.call_card_id;
+        console.log(callCardId);
+        module.exports.callCardId = callCardId;
+
+
+
+            userProfile.chatId
         id = userProfile.chatId
         findResponder(id)
             .then( async data => {
@@ -21,7 +30,7 @@ const responderId =req.body.Report.responder_id;
                     });
                     await bot.on("message",async ctx=>{
                         if(ctx.message.text=="Розпочати заповнення форми"){
-                            console.log(ctx.message.chat.id)
+                            console.log(ctx.message.chat.id);
                             await ctx.reply("Вкажіть ім'я і фамілію пацієнта",Markup.removeKeyboard().extra());
                             await ctx.scene.enter('getPatientName')}
                     });

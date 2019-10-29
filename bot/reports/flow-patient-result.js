@@ -15,19 +15,17 @@ module.exports = (stage) => {
     confirmPatientResult.on("text", async (ctx)=>{
 
         if(ctx.message.text == "Так, все вірно"){
-            await ctx.reply(`Дякуємо, опитування завершено!\nОтримані дані:\nІм'я пацієнта: ${ctx.session.patientName}\nВік пацієнта: ${ctx.session.patientAge}\nСтать пацієнта: ${ctx.session.patientGender}\nВага пацієнта: ${ctx.session.patientWeight}\nДіагноз: ${ctx.session.patientDiagnosis}\nНадана допомога: ${ctx.session.patientHelp}\nКоментар до наданої допомоги: ${ctx.session.patientHelpComment}
-Результат: ${ctx.session.patientResult}\n\nВсе вірно?
+            await ctx.reply(`Дякуємо, опитування завершено!\nОтримані дані:\nІм'я пацієнта: ${ctx.session.patientName}\nВік пацієнта: ${ctx.session.patientAge}\nСтать пацієнта: ${ctx.session.patientGender}\nВага пацієнта: ${ctx.session.patientWeight}\nДіагноз: ${ctx.session.patientDiagnosis}\nНадана допомога: ${ctx.session.patientHelp}\nРезультат: ${ctx.session.patientResult}\n\nВсе вірно?
                          
          `,keyboards.confirmKeyboard)
             let result = {patientName,
-                patientAge,
                 patientGender,
                 patientWeight,
                 patientDiagnosis,
                 patientHelp,
-                patientHelpComment,
+                patientHelp,
                 patientResult} = ctx.session;
-            //console.log(result);
+            console.log(result);
             await ctx.scene.enter("confirmAll");
 
         }else if(ctx.message.text == "Ні, хочу ввести повторно"){

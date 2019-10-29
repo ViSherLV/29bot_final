@@ -7,11 +7,12 @@ const schema = new Schema({
   status: { type: String },
     reports: [{fullName: String,
                 age: String,
-                /*gender*/sex:String,
+                sex:String,
                 weight: String,
                 diagnosis:String,
-                /*help*/helpProvided:String,
-                /*result*/erResult:String,
+                helpProvided:String,
+                helpComment: String,
+                erResult:String,
                 callcardId:String
 
     }]

@@ -10,9 +10,6 @@ module.exports = (stage) => {
     getPatientAge.on("text", async (ctx)=>{
         ctx.session.patientAge = ctx.message.text;
         await ctx.reply(`Вік пацієнта  - ${ctx.message.text}, вірно ?`,keyboards.confirmKeyboard);
-        //const myModule= require("../../api/reports");
-        //const test = myModule.responderId;
-        //console.log(test);
         await ctx.scene.enter("confirmPatientAge");
 
     });
